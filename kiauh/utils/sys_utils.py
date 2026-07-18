@@ -405,7 +405,7 @@ def install_system_packages(packages: List[str]) -> None:
     try:
         if is_arch():
             arch_packages = list({translate_package_name(p) for p in packages})
-            command = [*get_arch_pkg_manager_cmd(), "-S", "--needed", "--noconfirm", *arch_packages]
+            command = [*get_arch_pkg_manager_cmd(), "-S", "--needed", *arch_packages]
         else:
             command = ["sudo", "apt-get", "install", "-y"]
             for pkg in packages:
@@ -427,7 +427,7 @@ def upgrade_system_packages(packages: List[str]) -> None:
     try:
         if is_arch():
             arch_packages = list({translate_package_name(p) for p in packages})
-            command = [*get_arch_pkg_manager_cmd(), "-S", "--noconfirm", *arch_packages]
+            command = [*get_arch_pkg_manager_cmd(), "-S", *arch_packages]
         else:
             command = ["sudo", "apt-get", "upgrade", "-y"]
             for pkg in packages:
