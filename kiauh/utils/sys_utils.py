@@ -469,6 +469,14 @@ def download_file(url: str, target: Path, show_progress=True) -> None:
     :return: None
     """
     try:
+        import ssl
+
+        # Build an opener that respects system proxy env vars
+        proxy_handler = urllib.request.ProxyHandler()
+        https_handler = urllib.request.HTTPSHandler(context=ssl.create_default_context())
+        opener = urllib.request.build_opener(proxy_handler, https_handler)
+        urllib.request.install_opener(opener)
+
         if show_progress:
             urllib.request.urlretrieve(url, target, download_progress)
             sys.stdout.write("\n")

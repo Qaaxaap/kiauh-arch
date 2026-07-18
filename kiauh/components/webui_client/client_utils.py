@@ -13,7 +13,7 @@ import re
 import shutil
 from json import JSONDecodeError
 from pathlib import Path
-from subprocess import PIPE, CalledProcessError, run
+from subprocess import DEVNULL, PIPE, CalledProcessError, run
 from typing import List, get_args
 
 from components.klipper.klipper import Klipper
@@ -280,6 +280,59 @@ def get_download_url(base_url: str, client: BaseWebClient) -> str:
 #################################################
 
 
+def _ensure_nginx_dir() -> None:
+    """Create /etc/nginx/conf.d if it does not exist (needed on Arch)."""
+    try:
+        run(["sudo", "mkdir", "-p", NGINX_CONFD], stderr=PIPE, check=True)
+    except CalledProcessError as e:
+        Logger.print_error(f"Unable to create {NGINX_CONFD}: {e.stderr.decode()}")
+        raise
+
+
+def _ensure_nginx_include() -> None:
+    """Add include /etc/nginx/conf.d/* to nginx.conf if missing (needed on Arch)."""
+    nginx_conf = Path("/etc/nginx/nginx.conf")
+    include_line = f"include {NGINX_CONFD}/*;"
+
+    try:
+        content = nginx_conf.read_text()
+    except OSError:
+        return
+
+    if include_line in content:
+        return
+
+    Logger.print_status("Adding conf.d include to nginx.conf ...")
+    # Insert the include line after the last existing include in the http block,
+    # or simply append before the closing } of the http block.
+    lines = content.splitlines()
+    new_lines = []
+    in_http = False
+    inserted = False
+    for line in lines:
+        new_lines.append(line)
+        stripped = line.strip()
+        if stripped == "http {" or stripped == "http{":
+            in_http = True
+        if in_http and not inserted and stripped.startswith("include"):
+            new_lines.append(f"    {include_line}")
+            inserted = True
+    if not inserted:
+        # Fallback: append to end of file
+        new_lines.append(include_line)
+
+    try:
+        run(
+            ["sudo", "tee", nginx_conf.as_posix()],
+            input="\n".join(new_lines).encode(),
+            stdout=DEVNULL,
+            check=True,
+        )
+        Logger.print_ok("conf.d include added to nginx.conf!")
+    except CalledProcessError as e:
+        Logger.print_error(f"Failed to update nginx.conf: {e.stderr.decode()}")
+
+
 def copy_upstream_nginx_cfg() -> None:
     """
     Creates an upstream.conf in /etc/nginx/conf.d
@@ -288,6 +341,7 @@ def copy_upstream_nginx_cfg() -> None:
     source = MODULE_PATH.joinpath("assets/upstreams.conf")
     target = NGINX_CONFD.joinpath("upstreams.conf")
     try:
+        _ensure_nginx_dir()
         command = ["sudo", "cp", source, target]
         run(command, stderr=PIPE, check=True)
     except CalledProcessError as e:
@@ -304,6 +358,7 @@ def copy_common_vars_nginx_cfg() -> None:
     source = MODULE_PATH.joinpath("assets/common_vars.conf")
     target = NGINX_CONFD.joinpath("common_vars.conf")
     try:
+        _ensure_nginx_dir()
         command = ["sudo", "cp", source, target]
         run(command, stderr=PIPE, check=True)
     except CalledProcessError as e:
@@ -335,6 +390,7 @@ def generate_nginx_cfg_from_template(name: str, template_src: Path, **kwargs) ->
 
     target = NGINX_SITES_AVAILABLE.joinpath(name)
     try:
+        _ensure_nginx_dir()
         command = ["sudo", "mv", tmp, target]
         run(command, stderr=PIPE, check=True)
     except CalledProcessError as e:
@@ -359,6 +415,7 @@ def create_nginx_cfg(
         default_cfg = Path("/etc/nginx/sites-enabled/default")
         if default_cfg.exists():
             remove_file(default_cfg, True)
+        _ensure_nginx_include()
         generate_nginx_cfg_from_template(cfg_name, template_src=template_src, **kwargs)
         if source != target:
             create_symlink(source, target, True)
