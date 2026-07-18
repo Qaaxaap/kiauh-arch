@@ -21,7 +21,7 @@ from pathlib import Path
 from subprocess import DEVNULL, PIPE, CalledProcessError, Popen, check_output, run
 from typing import List, Literal, Set, Tuple
 
-from core.constants import SYSTEMD
+from core.constants import DEBIAN_TO_ARCH_PACKAGES, SYSTEMD
 from core.logger import Logger
 from utils.fs_utils import check_file_exist, remove_with_sudo
 from utils.input_utils import get_confirm
@@ -54,6 +54,26 @@ def kill(opt_err_msg: str = "") -> None:
         Logger.print_error(opt_err_msg)
     Logger.print_error("A critical error has occured. KIAUH was terminated.")
     sys.exit(1)
+
+
+def is_arch() -> bool:
+    try:
+        distro_id, _ = get_distro_info()
+        return distro_id == "arch"
+    except Exception:
+        return False
+
+
+def get_arch_pkg_manager_cmd() -> list[str]:
+    """Detect the available AUR helper or fall back to sudo pacman."""
+    for cmd in ("paru", "yay"):
+        if shutil.which(cmd):
+            return [cmd]
+    return ["sudo", "pacman"]
+
+
+def translate_package_name(pkg: str) -> str:
+    return DEBIAN_TO_ARCH_PACKAGES.get(pkg, pkg)
 
 
 def check_python_version(major: int, minor: int) -> bool:
@@ -238,9 +258,13 @@ def update_system_package_lists(silent: bool, rls_info_change=False) -> None:
     """
     Updates the systems package list |
     :param silent: Log info to the console or not
-    :param rls_info_change: Flag for "--allow-releaseinfo-change"
+    :param rls_info_change: Flag for "--allow-releaseinfo-change" (apt only)
     :return: None
     """
+    if is_arch():
+        _update_pacman_db(silent)
+        return
+
     cache_mtime: float = 0
     cache_files: List[Path] = [
         Path("/var/lib/apt/periodic/update-success-stamp"),
@@ -276,20 +300,58 @@ def update_system_package_lists(silent: bool, rls_info_change=False) -> None:
         raise
 
 
+def _update_pacman_db(silent: bool) -> None:
+    cache_dirs = list(Path("/var/lib/pacman/sync").glob("*.db"))
+    cache_mtime: float = 0
+    for cache_file in cache_dirs:
+        cache_mtime = max(cache_mtime, os.path.getmtime(cache_file))
+
+    update_age = int(time.time() - cache_mtime)
+    update_interval = 6 * 3600  # 6hrs
+
+    if update_age <= update_interval:
+        return
+
+    if not silent:
+        Logger.print_status("Updating package list...")
+
+    try:
+        command = [*get_arch_pkg_manager_cmd(), "-Sy"]
+        result = run(command, stderr=PIPE, text=True)
+        if result.returncode != 0:
+            Logger.print_error(f"{result.stderr}", False)
+            Logger.print_error("Updating system package list failed!")
+            return
+
+        Logger.print_ok("System package list update successful!")
+    except CalledProcessError as e:
+        Logger.print_error(f"Error updating system package list:\n{e.stderr.decode()}")
+        raise
+
+
 def get_upgradable_packages() -> List[str]:
     """
     Reads all system packages that can be upgraded.
     :return: A list of package names available for upgrade
     """
     try:
-        command = ["apt", "list", "--upgradable"]
+        if is_arch():
+            command = [*get_arch_pkg_manager_cmd(), "-Qu"]
+        else:
+            command = ["apt", "list", "--upgradable"]
+
         output: str = check_output(command, stderr=DEVNULL, text=True, encoding="utf-8")
         pkglist: List[str] = []
 
         for line in output.split("\n"):
-            if "/" not in line:
+            if not line.strip():
                 continue
-            pkg = line.split("/")[0]
+            if is_arch():
+                pkg = line.split()[0]
+            else:
+                if "/" not in line:
+                    continue
+                pkg = line.split("/")[0]
             pkglist.append(pkg)
 
         return pkglist
@@ -305,15 +367,25 @@ def check_package_install(packages: Set[str]) -> List[str]:
     """
     not_installed = []
     for package in packages:
-        command = ["dpkg-query", "-f'${Status}'", "--show", package]
-        result = run(
-            command,
-            stdout=PIPE,
-            stderr=DEVNULL,
-            text=True,
-        )
-        if "installed" not in result.stdout.strip("'").split():
-            not_installed.append(package)
+        if is_arch():
+            arch_pkg = translate_package_name(package)
+            result = run(
+                ["pacman", "-Q", arch_pkg],
+                stdout=DEVNULL,
+                stderr=DEVNULL,
+            )
+            if result.returncode != 0:
+                not_installed.append(package)
+        else:
+            command = ["dpkg-query", "-f'${Status}'", "--show", package]
+            result = run(
+                command,
+                stdout=PIPE,
+                stderr=DEVNULL,
+                text=True,
+            )
+            if "installed" not in result.stdout.strip("'").split():
+                not_installed.append(package)
 
     return not_installed
 
@@ -325,9 +397,13 @@ def install_system_packages(packages: List[str]) -> None:
     :return: None
     """
     try:
-        command = ["sudo", "apt-get", "install", "-y"]
-        for pkg in packages:
-            command.append(pkg)
+        if is_arch():
+            arch_packages = list({translate_package_name(p) for p in packages})
+            command = [*get_arch_pkg_manager_cmd(), "-S", "--needed", "--noconfirm", *arch_packages]
+        else:
+            command = ["sudo", "apt-get", "install", "-y"]
+            for pkg in packages:
+                command.append(pkg)
         run(command, stderr=PIPE, check=True)
 
         Logger.print_ok("Packages successfully installed.")
@@ -343,9 +419,13 @@ def upgrade_system_packages(packages: List[str]) -> None:
     :return: None
     """
     try:
-        command = ["sudo", "apt-get", "upgrade", "-y"]
-        for pkg in packages:
-            command.append(pkg)
+        if is_arch():
+            arch_packages = list({translate_package_name(p) for p in packages})
+            command = [*get_arch_pkg_manager_cmd(), "-S", "--noconfirm", *arch_packages]
+        else:
+            command = ["sudo", "apt-get", "upgrade", "-y"]
+            for pkg in packages:
+                command.append(pkg)
         run(command, stderr=PIPE, check=True)
 
         Logger.print_ok("Packages successfully upgraded.")

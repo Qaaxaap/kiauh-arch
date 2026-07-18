@@ -106,10 +106,7 @@ def remove_client_dir(client: BaseWebClient) -> bool:
 def remove_client_nginx_config(name: str) -> bool:
     Logger.print_status(f"Removing NGINX config for {name.capitalize()} ...")
     return remove_with_sudo(
-        [
-            NGINX_SITES_AVAILABLE.joinpath(name),
-            NGINX_SITES_ENABLED.joinpath(name),
-        ]
+        list({NGINX_SITES_AVAILABLE.joinpath(name), NGINX_SITES_ENABLED.joinpath(name)})
     )
 
 

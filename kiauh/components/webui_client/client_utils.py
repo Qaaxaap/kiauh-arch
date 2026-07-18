@@ -356,9 +356,12 @@ def create_nginx_cfg(
 
         source = NGINX_SITES_AVAILABLE.joinpath(cfg_name)
         target = NGINX_SITES_ENABLED.joinpath(cfg_name)
-        remove_file(Path("/etc/nginx/sites-enabled/default"), True)
+        default_cfg = Path("/etc/nginx/sites-enabled/default")
+        if default_cfg.exists():
+            remove_file(default_cfg, True)
         generate_nginx_cfg_from_template(cfg_name, template_src=template_src, **kwargs)
-        create_symlink(source, target, True)
+        if source != target:
+            create_symlink(source, target, True)
         set_nginx_permissions()
 
         Logger.print_ok(f"NGINX config for {display_name} successfully created.")
