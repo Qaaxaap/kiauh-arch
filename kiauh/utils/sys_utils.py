@@ -136,6 +136,10 @@ def create_python_venv(
     Logger.print_status("Set up Python virtual environment ...")
     # If binarry override is not set, we use default defined here
     python_binary = use_python_binary if use_python_binary else "/usr/bin/python3"
+    # On Arch, always use --system-site-packages so pre-compiled system
+    # packages (e.g. python-greenlet) are used instead of pip compiling from source
+    if is_arch():
+        allow_access_to_system_site_packages = True
     cmd = ["virtualenv", "-p", python_binary, target.as_posix()]
     cmd.append(
         "--system-site-packages"
@@ -202,20 +206,26 @@ def update_python_pip(target: Path) -> None:
         raise
 
 
-def install_python_requirements(target: Path, requirements: Path) -> None:
+def install_python_requirements(
+    target: Path, requirements: Path, exclude: set[str] | None = None
+) -> None:
     """
     Installs the python packages based on a provided requirements.txt |
     :param target: Path of the virtualenv
     :param requirements: Path to the requirements.txt file
+    :param exclude: Optional set of package names to skip (e.g. those provided by system)
     :return: None
     """
     try:
         Logger.print_status("Installing Python requirements ...")
+        req_file = requirements
+        if exclude:
+            req_file = _filter_requirements(requirements, exclude)
         command = [
             target.joinpath("bin/pip").as_posix(),
             "install",
             "-r",
-            f"{requirements}",
+            f"{req_file}",
         ]
         result = run(command, stderr=PIPE, text=True)
 
@@ -229,6 +239,21 @@ def install_python_requirements(target: Path, requirements: Path) -> None:
         log = f"Error installing Python requirements: {e}"
         Logger.print_error(log)
         raise VenvCreationFailedException(log)
+
+
+def _filter_requirements(requirements: Path, exclude: set[str]) -> Path:
+    filtered = requirements.parent / f"{requirements.name}.arch-filtered"
+    with open(requirements) as f:
+        lines = f.readlines()
+    with open(filtered, "w") as f:
+        for line in lines:
+            stripped = line.strip()
+            pkg_name = stripped.split("==")[0].split(">=")[0].split("<=")[0].split("~=")[0].strip()
+            if pkg_name in exclude:
+                f.write(f"# {line.strip()}  # provided by system package\n")
+            else:
+                f.write(line)
+    return filtered
 
 
 def install_python_packages(target: Path, packages: List[str]) -> None:

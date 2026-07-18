@@ -28,10 +28,10 @@ from components.klipper.klipper_utils import (
     backup_klipper_dir,
     check_user_groups,
     create_example_printer_cfg,
+    get_arch_system_python_packages,
     get_install_count,
     handle_disruptive_system_packages,
     install_klipper_packages,
-    link_system_python_to_venv,
 )
 from components.klipper.services.klipper_instance_service import KlipperInstanceService
 from components.moonraker.moonraker import Moonraker
@@ -167,8 +167,7 @@ class KlipperSetupService:
         InstanceManager.stop_all(self.klipper_list)
         git_pull_wrapper(KLIPPER_DIR)
         install_klipper_packages()
-        link_system_python_to_venv(KLIPPER_ENV_DIR)
-        install_python_requirements(KLIPPER_ENV_DIR, KLIPPER_REQ_FILE)
+        install_python_requirements(KLIPPER_ENV_DIR, KLIPPER_REQ_FILE, exclude=get_arch_system_python_packages())
         InstanceManager.start_all(self.klipper_list)
 
     def remove(
@@ -280,8 +279,7 @@ class KlipperSetupService:
         try:
             install_klipper_packages()
             if create_python_venv(KLIPPER_ENV_DIR, False, False, self.settings.klipper.use_python_binary):
-                link_system_python_to_venv(KLIPPER_ENV_DIR)
-                install_python_requirements(KLIPPER_ENV_DIR, KLIPPER_REQ_FILE)
+                install_python_requirements(KLIPPER_ENV_DIR, KLIPPER_REQ_FILE, exclude=get_arch_system_python_packages())
         except Exception:
             Logger.print_error("Error during installation of Klipper requirements!")
             raise
