@@ -223,6 +223,62 @@ def install_klipper_packages() -> None:
 
     check_install_dependencies({*packages})
 
+    _install_system_python_deps()
+
+
+def _install_system_python_deps() -> None:
+    from utils.sys_utils import is_arch
+
+    if not is_arch():
+        return
+
+    # Map pip package names to Arch system packages that need compilation
+    arch_py_pkgs = [
+        "python-greenlet",
+        "python-cffi",
+    ]
+    Logger.print_status("Installing pre-compiled Python system packages ...")
+    check_install_dependencies({*arch_py_pkgs})
+
+
+def link_system_python_to_venv(venv_dir: Path) -> None:
+    from utils.sys_utils import is_arch
+
+    if not is_arch():
+        return
+
+    pip_to_system = {
+        "greenlet": "python-greenlet",
+        "cffi": "python-cffi",
+    }
+
+    Logger.print_status("Linking system Python packages into virtualenv ...")
+
+    code = "import site; print(site.getsitepackages()[0])"
+    venv_py = venv_dir.joinpath("bin/python").as_posix()
+    vr = run([venv_py, "-c", code], capture_output=True, text=True)
+    if vr.returncode != 0:
+        Logger.print_warn("Unable to determine venv site-packages path")
+        return
+    venv_sp = Path(vr.stdout.strip())
+
+    sr = run(["python3", "-c", code], capture_output=True, text=True)
+    if sr.returncode != 0:
+        Logger.print_warn("Unable to determine system site-packages path")
+        return
+    sys_sp = Path(sr.stdout.strip())
+
+    for pip_name, sys_pkg in pip_to_system.items():
+        src = sys_sp / pip_name
+        dst = venv_sp / pip_name
+        if src.exists() and not dst.exists():
+            dst.symlink_to(src)
+            Logger.print_info(f"  Linked system '{pip_name}' into venv")
+        for di in sys_sp.glob(f"{pip_name}-*.dist-info"):
+            d = venv_sp / di.name
+            if not d.exists():
+                d.symlink_to(di)
+
 
 def install_input_shaper_deps() -> None:
     if not KLIPPER_ENV_DIR.exists():
