@@ -33,7 +33,9 @@ from utils.common import check_install_dependencies, get_install_status
 from utils.instance_utils import get_instances
 from utils.sys_utils import (
     get_ipv4_addr,
+    is_arch,
     parse_packages_from_file,
+    translate_package_name,
 )
 
 
@@ -51,12 +53,22 @@ def install_moonraker_packages() -> None:
         )
         parser = SysDepsParser()
         sysdeps = load_sysdeps_json(MOONRAKER_DEPS_JSON_FILE)
-        moonraker_deps.extend(parser.parse_dependencies(sysdeps))
+        moonraker_deps = parser.parse_dependencies(sysdeps)
 
-    elif MOONRAKER_INSTALL_SCRIPT.exists():
-        Logger.print_warn(f"{MOONRAKER_DEPS_JSON_FILE.name} not found!")
+        # On Arch, the JSON typically has no "arch" key, only "debian".
+        # Force-parse the debian packages and translate them to Arch names.
+        if not moonraker_deps and is_arch() and "debian" in sysdeps:
+            Logger.print_info("Mapping debian dependencies to Arch equivalents ...")
+            for dep in sysdeps["debian"]:
+                pkg = dep.split(";")[0].strip()
+                moonraker_deps.append(translate_package_name(pkg))
+
+    if not moonraker_deps and MOONRAKER_INSTALL_SCRIPT.exists():
+        Logger.print_warn(
+            f"No dependencies found for current distro in {MOONRAKER_DEPS_JSON_FILE.name}!"
+        )
         Logger.print_info(
-            f"Parsing system dependencies from {MOONRAKER_INSTALL_SCRIPT.name} ..."
+            f"Falling back to {MOONRAKER_INSTALL_SCRIPT.name} ..."
         )
         moonraker_deps = parse_packages_from_file(MOONRAKER_INSTALL_SCRIPT)
 

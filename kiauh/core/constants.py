@@ -44,6 +44,15 @@ DEBIAN_TO_ARCH_PACKAGES: Dict[str, str] = {
     "libnewlib-arm-none-eabi": "arm-none-eabi-newlib",
     "gcc-arm-none-eabi": "arm-none-eabi-gcc",
     "binutils-arm-none-eabi": "arm-none-eabi-binutils",
+    # Moonraker dependencies (from scripts/system-dependencies.json)
+    "libopenjp2-7": "openjpeg2",
+    "libsodium-dev": "libsodium",
+    "zlib1g-dev": "zlib",
+    "libjpeg-dev": "libjpeg-turbo",
+    "packagekit": "packagekit",
+    "wireless-tools": "wireless_tools",
+    "iw": "iw",
+    "python3-libcamera": "python-libcamera",
 }
 
 # strings

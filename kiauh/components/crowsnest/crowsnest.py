@@ -46,7 +46,9 @@ from utils.input_utils import get_confirm
 from utils.instance_utils import get_instances
 from utils.sys_utils import (
     cmd_sysctl_service,
+    is_arch,
     parse_packages_from_file,
+    translate_package_name,
 )
 
 
@@ -201,11 +203,21 @@ def install_crowsnest_packages() -> None:
         )
         parser = SysDepsParser()
         sysdeps = load_sysdeps_json(CROWSNEST_DEPS_JSON_FILE)
-        crowsnest_deps.extend(parser.parse_dependencies(sysdeps))
+        crowsnest_deps = parser.parse_dependencies(sysdeps)
 
-    elif crowsnest_version <= 4 and CROWSNEST_INSTALL_SCRIPT.exists():
+        # On Arch, the JSON typically has no "arch" key, only "debian".
+        if not crowsnest_deps and is_arch() and "debian" in sysdeps:
+            Logger.print_info("Mapping debian dependencies to Arch equivalents ...")
+            for dep in sysdeps["debian"]:
+                pkg = dep.split(";")[0].strip()
+                crowsnest_deps.append(translate_package_name(pkg))
+
+    if not crowsnest_deps and CROWSNEST_INSTALL_SCRIPT.exists():
+        Logger.print_warn(
+            f"No dependencies found for current distro in {CROWSNEST_DEPS_JSON_FILE.name}!"
+        )
         Logger.print_info(
-            f"Parsing system dependencies from {CROWSNEST_INSTALL_SCRIPT.name} ..."
+            f"Falling back to {CROWSNEST_INSTALL_SCRIPT.name} ..."
         )
         crowsnest_deps = parse_packages_from_file(CROWSNEST_INSTALL_SCRIPT)
 
