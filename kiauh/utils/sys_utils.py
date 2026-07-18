@@ -57,9 +57,15 @@ def kill(opt_err_msg: str = "") -> None:
 
 
 def is_arch() -> bool:
+    """Detect Arch Linux or derivatives by reading /etc/os-release directly."""
     try:
-        distro_id, _ = get_distro_info()
-        return distro_id == "arch"
+        with open("/etc/os-release") as f:
+            content = f.read()
+        ids = set()
+        for line in content.splitlines():
+            if line.startswith("ID=") or line.startswith("ID_LIKE="):
+                ids.update(line.split("=", 1)[1].strip('"').lower().split())
+        return "arch" in ids
     except Exception:
         return False
 
@@ -684,8 +690,6 @@ def get_distro_info() -> Tuple[str, str]:
 
     if not distro_id:
         raise ValueError("Error reading distro id!")
-    if not distro_version:
-        raise ValueError("Error reading distro version!")
 
     return distro_id.lower(), distro_version
 
