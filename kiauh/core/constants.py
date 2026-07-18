@@ -15,21 +15,35 @@ from typing import Dict
 # global dependencies
 GLOBAL_DEPS = ["git", "wget", "curl", "unzip", "dfu-util", "python3-virtualenv"]
 
-# Debian to Arch Linux package name mappings
+# Debian to Arch Linux package name mappings (all verified against archlinux.org)
 DEBIAN_TO_ARCH_PACKAGES: Dict[str, str] = {
+    # KIAUH global deps + common
     "python3-virtualenv": "python-virtualenv",
+    "virtualenv": "python-virtualenv",
+    "python3-dev": "python",
+    "python3-pip": "python-pip",
+    "python3-setuptools": "python-setuptools",
     "python3-numpy": "python-numpy",
     "python3-matplotlib": "python-matplotlib",
     "libopenblas-dev": "openblas",
-    "python3-pip": "python-pip",
-    "python3-dev": "python",
     "libyaml-dev": "libyaml",
-    "build-essential": "base-devel",
-    "python3-setuptools": "python-setuptools",
-    "avahi-daemon": "avahi",
-    "dpkg-dev": "base-devel",
     "libffi-dev": "libffi",
     "libssl-dev": "openssl",
+    "build-essential": "base-devel",
+    "dpkg-dev": "base-devel",
+    "avahi-daemon": "avahi",
+    "pkg-config": "pkgconf",
+    # Klipper build dependencies (from scripts/install-ubuntu-*.sh)
+    "libncurses-dev": "ncurses",
+    "libusb-dev": "libusb",
+    "libusb-1.0": "libusb",
+    "gcc-avr": "avr-gcc",
+    "binutils-avr": "avr-binutils",
+    "avr-libc": "avr-libc",
+    "stm32flash": "stm32flash",
+    "libnewlib-arm-none-eabi": "arm-none-eabi-newlib",
+    "gcc-arm-none-eabi": "arm-none-eabi-gcc",
+    "binutils-arm-none-eabi": "arm-none-eabi-binutils",
 }
 
 # strings
